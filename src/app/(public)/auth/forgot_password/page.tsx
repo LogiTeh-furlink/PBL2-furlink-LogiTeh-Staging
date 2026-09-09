@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -15,7 +15,7 @@ import "@/app/(public)/auth/auth.css";
 
 const OTP_VALIDITY_SECONDS = 120; // 2 minutes validity per code
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordContent() {
   const searchParams = useSearchParams();
   const prefilledIdentifier = searchParams.get("identifier") || "";
 
@@ -137,7 +137,6 @@ export default function ForgotPasswordPage() {
 
       const currentEmail = accountData.resolved_email;
 
-      // Check account status in profiles table to restrict suspended / deactivated users
       const { data: userProfile } = await supabase
         .from("profiles")
         .select("status")
@@ -272,7 +271,6 @@ export default function ForgotPasswordPage() {
         return;
       }
 
-      // Fetch role from profiles table (matching login logic)
       const { data: userProfile } = await supabase
         .from("profiles")
         .select("role, status")
@@ -458,5 +456,13 @@ export default function ForgotPasswordPage() {
         </form>
       )}
     </div>
+  );
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense fallback={<div className="signup-wrapper"><div className="signup-card"><p>Loading...</p></div></div>}>
+      <ForgotPasswordContent />
+    </Suspense>
   );
 }
