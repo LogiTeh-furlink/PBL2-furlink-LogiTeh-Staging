@@ -137,6 +137,7 @@ function ForgotPasswordContent() {
 
       const currentEmail = accountData.resolved_email;
 
+      // Check account status in profiles table to restrict suspended / deactivated users
       const { data: userProfile } = await supabase
         .from("profiles")
         .select("status")
@@ -271,6 +272,7 @@ function ForgotPasswordContent() {
         return;
       }
 
+      // Fetch role from profiles table (matching login logic)
       const { data: userProfile } = await supabase
         .from("profiles")
         .select("role, status")
@@ -456,5 +458,19 @@ function ForgotPasswordContent() {
         </form>
       )}
     </div>
+  );
+}
+
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="signup-wrapper">
+        <div className="signup-card">
+          <p style={{ textAlign: "center", color: "#64748b" }}>Loading...</p>
+        </div>
+      </div>
+    }>
+      <ForgotPasswordContent />
+    </Suspense>
   );
 }
