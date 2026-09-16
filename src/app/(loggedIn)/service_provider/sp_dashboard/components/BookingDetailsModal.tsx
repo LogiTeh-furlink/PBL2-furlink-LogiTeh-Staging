@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Booking, BookingStatus } from '../type';
 import { formatCurrency, formatStatus } from '../utils';
 
@@ -13,8 +14,34 @@ export default function BookingDetailsModal({
   setSelectedBooking, 
   handleUpdateStatus 
 }: BookingDetailsModalProps) {
+  const supabase = createClientComponentClient();
+
+  // Rejection State
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
+
+  // Employee Assignment State (New Feature)
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [showCompleteInput, setShowCompleteInput] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Fetch employees when the modal opens for a 'paid' (Upcoming) booking
+  useEffect(() => {
+    if (selectedBooking.booking_status === 'paid' && selectedBooking.sp_id) {
+      const fetchEmployees = async () => {
+        const { data, error } = await supabase
+          .from('sp_employees_info')
+          .select('id, employee_first_name, employee_last_name, employee_position')
+          .eq('sp_id', selectedBooking.sp_id);
+          
+        if (data && !error) {
+          setEmployees(data);
+        }
+      };
+      fetchEmployees();
+    }
+  }, [selectedBooking, supabase]);
 
   const handleReject = () => {
     if (!rejectionReason.trim()) {
@@ -24,6 +51,32 @@ export default function BookingDetailsModal({
     handleUpdateStatus(selectedBooking.id, 'rejected', rejectionReason);
     setShowRejectInput(false);
     setRejectionReason('');
+  };
+
+  // New function to handle marking as completed with an assigned employee
+  const handleComplete = async () => {
+    if (!selectedEmployeeId) {
+      alert('Please select an employee who handled this booking.');
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      // 1. Save the assigned employee ID to the booking_info table first
+      const { error } = await supabase
+        .from('booking_info')
+        .update({ assigned_employee_id: selectedEmployeeId })
+        .eq('id', selectedBooking.id);
+
+      if (error) throw error;
+
+      // 2. Trigger the parent function to update the status to 'to_rate' and close modal
+      handleUpdateStatus(selectedBooking.id, 'to_rate');
+    } catch (err: any) {
+      alert('Failed to assign employee: ' + err.message);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   return (
@@ -103,8 +156,6 @@ export default function BookingDetailsModal({
                     <button
                       onClick={handleReject}
                       style={{ flex: 1, padding: '0.75rem 1.5rem', background: '#dc2626', color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.875rem', transition: 'background 0.2s' }}
-                      onMouseOver={(e) => (e.currentTarget.style.background = '#b91c1c')}
-                      onMouseOut={(e) => (e.currentTarget.style.background = '#dc2626')}
                     >
                       Confirm Reject
                     </button>
@@ -114,8 +165,6 @@ export default function BookingDetailsModal({
                         setRejectionReason('');
                       }}
                       style={{ padding: '0.75rem 1.5rem', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.875rem', transition: 'background 0.2s' }}
-                      onMouseOver={(e) => (e.currentTarget.style.background = '#e2e8f0')}
-                      onMouseOut={(e) => (e.currentTarget.style.background = '#f1f5f9')}
                     >
                       Cancel
                     </button>
@@ -127,16 +176,12 @@ export default function BookingDetailsModal({
                   <button
                     onClick={() => setShowRejectInput(true)}
                     style={{ padding: '0.75rem 1.5rem', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.875rem', transition: 'background 0.2s' }}
-                    onMouseOver={(e) => (e.currentTarget.style.background = '#fecaca')}
-                    onMouseOut={(e) => (e.currentTarget.style.background = '#fee2e2')}
                   >
                     Reject Booking
                   </button>
                   <button
                     onClick={() => handleUpdateStatus(selectedBooking.id, 'approved')}
                     style={{ padding: '0.75rem 1.5rem', background: '#1e3a8a', color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.875rem', transition: 'background 0.2s' }}
-                    onMouseOver={(e) => (e.currentTarget.style.background = '#1d4ed8')}
-                    onMouseOut={(e) => (e.currentTarget.style.background = '#1e3a8a')}
                   >
                     Approve Booking
                   </button>
@@ -145,27 +190,64 @@ export default function BookingDetailsModal({
             </>
           )}
 
-          {/* Action: For Upcoming (Paid) Bookings */}
+          {/* Action: For Upcoming (Paid) Bookings - NEW EMPLOYEE DROPDOWN */}
           {selectedBooking.booking_status === 'paid' && (
-            <button
-              onClick={() => handleUpdateStatus(selectedBooking.id, 'to_rate')}
-              style={{ padding: '0.75rem 1.5rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.875rem', transition: 'background 0.2s' }}
-              onMouseOver={(e) => (e.currentTarget.style.background = '#059669')}
-              onMouseOut={(e) => (e.currentTarget.style.background = '#10b981')}
-            >
-              Mark as Completed
-            </button>
+            <>
+              {showCompleteInput ? (
+                <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
+                  <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Assign Staff / Employee:</label>
+                  <select
+                    value={selectedEmployeeId}
+                    onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                    style={{ width: '100%', padding: '0.75rem', background: 'white', border: '1px solid #cbd5e1', borderRadius: '0.5rem', fontSize: '0.875rem', marginBottom: '1rem' }}
+                  >
+                    <option value="">-- Select an employee --</option>
+                    {employees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.employee_first_name} {emp.employee_last_name} ({emp.employee_position.replace('_', ' ')})
+                      </option>
+                    ))}
+                  </select>
+                  
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button
+                      onClick={handleComplete}
+                      disabled={isUpdating}
+                      style={{ flex: 1, padding: '0.75rem 1.5rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.875rem', opacity: isUpdating ? 0.7 : 1 }}
+                    >
+                      {isUpdating ? 'Saving...' : 'Confirm Completion'}
+                    </button>
+                    <button
+                      onClick={() => { 
+                        setShowCompleteInput(false); 
+                        setSelectedEmployeeId(''); 
+                      }}
+                      style={{ padding: '0.75rem 1.5rem', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.875rem' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowCompleteInput(true)}
+                  style={{ padding: '0.75rem 1.5rem', background: '#10b981', color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.875rem', transition: 'background 0.2s' }}
+                >
+                  Mark as Completed
+                </button>
+              )}
+            </>
           )}
 
           <button
             onClick={() => {
               setSelectedBooking(null);
               setShowRejectInput(false);
+              setShowCompleteInput(false);
               setRejectionReason('');
+              setSelectedEmployeeId('');
             }}
             style={{ padding: '0.75rem 1.5rem', background: '#f1f5f9', color: '#334155', border: 'none', borderRadius: '0.75rem', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.875rem', transition: 'background 0.2s' }}
-            onMouseOver={(e) => (e.currentTarget.style.background = '#e2e8f0')}
-            onMouseOut={(e) => (e.currentTarget.style.background = '#f1f5f9')}
           >
             Close
           </button>

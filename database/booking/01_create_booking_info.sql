@@ -59,3 +59,6 @@ CREATE POLICY "Pet owner or provider can update a booking" ON public.booking_inf
             WHERE sp.id = booking_info.sp_id AND sp.profiles_id = auth.uid()
         )
     );
+
+ALTER TABLE public.booking_info
+ADD COLUMN IF NOT EXISTS assigned_employee_id UUID REFERENCES public.sp_employees_info(id) ON DELETE SET NULL;

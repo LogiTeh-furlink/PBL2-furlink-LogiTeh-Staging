@@ -458,11 +458,3 @@ function ForgotPasswordContent() {
     </div>
   );
 }
-
-export default function ForgotPasswordPage() {
-  return (
-    <Suspense fallback={<div className="signup-wrapper"><div className="signup-card"><p>Loading...</p></div></div>}>
-      <ForgotPasswordContent />
-    </Suspense>
-  );
-}
